@@ -10,6 +10,7 @@ public class InputPlayer
     private Thread? _thread;
     private volatile bool _stopFlag;
     private volatile bool _playing;
+    private readonly ManualResetEventSlim _stopEvent = new(false);
     private readonly Random _rng = new();
     private static readonly int InputSize = Marshal.SizeOf<INPUT>();
 
@@ -21,6 +22,7 @@ public class InputPlayer
     {
         if (_playing) return;
         _stopFlag = false;
+        _stopEvent.Reset();
         _playing = true;
 
         var copy = new List<MacroEvent>(events);
@@ -40,7 +42,14 @@ public class InputPlayer
         _thread.Start();
     }
 
-    public void Stop() => _stopFlag = true;
+    public void Stop()
+    {
+        _stopFlag = true;
+        _stopEvent.Set();
+        var t = _thread;
+        if (t != null && t.IsAlive)
+            t.Join(500);
+    }
 
     private static readonly HashSet<ushort> NoJitterKeys = new()
     {
@@ -89,6 +98,8 @@ public class InputPlayer
 
         NativeMethods.QueryPerformanceFrequency(out long freq);
         var input = new INPUT[1];
+        var heldKeys = new HashSet<ushort>();
+        var heldButtons = new HashSet<MouseButton>();
 
         try
         {
@@ -104,7 +115,13 @@ public class InputPlayer
                     WaitUntil(targetTick, freq);
                     if (_stopFlag) break;
 
-                    EmitEvent(events[i], target, input);
+                    var evt = events[i];
+                    if (evt.Type == EventType.KeyDown) heldKeys.Add(evt.ScanCode);
+                    else if (evt.Type == EventType.KeyUp) heldKeys.Remove(evt.ScanCode);
+                    else if (evt.Type == EventType.MouseDown) heldButtons.Add(evt.Button);
+                    else if (evt.Type == EventType.MouseUp) heldButtons.Remove(evt.Button);
+
+                    EmitEvent(evt, target, input);
                 }
                 iteration++;
 
@@ -114,6 +131,7 @@ public class InputPlayer
         }
         finally
         {
+            ReleaseAll(heldKeys, heldButtons, input);
             if (hasTarget && originalFg != IntPtr.Zero && NativeMethods.IsWindow(originalFg))
                 NativeMethods.SetForegroundWindow(originalFg);
         }
@@ -128,12 +146,50 @@ public class InputPlayer
 
             long remainUs = (targetTick - now) * 1_000_000 / freq;
             if (remainUs > 5000)
-                Thread.Sleep((int)(remainUs / 1000 - 2));
+            {
+                _stopEvent.Wait((int)(remainUs / 1000 - 2));
+                return;
+            }
             else if (remainUs > 500)
-                Thread.Sleep(0); // yield timeslice
+                Thread.Sleep(0);
             else
                 Thread.SpinWait(20);
         }
+    }
+
+    private static void ReleaseAll(HashSet<ushort> heldKeys, HashSet<MouseButton> heldButtons, INPUT[] input)
+    {
+        foreach (var sc in heldKeys)
+        {
+            input[0] = default;
+            input[0].type = NativeMethods.INPUT_KEYBOARD;
+            input[0].u.ki.wScan = (ushort)(sc & 0xFF);
+            input[0].u.ki.dwFlags = NativeMethods.KEYEVENTF_SCANCODE | NativeMethods.KEYEVENTF_KEYUP;
+            if ((sc & 0xE000) != 0)
+                input[0].u.ki.dwFlags |= NativeMethods.KEYEVENTF_EXTENDEDKEY;
+            NativeMethods.SendInput(1, input, InputSize);
+        }
+        heldKeys.Clear();
+
+        foreach (var btn in heldButtons)
+        {
+            input[0] = default;
+            input[0].type = NativeMethods.INPUT_MOUSE;
+            switch (btn)
+            {
+                case MouseButton.Left: input[0].u.mi.dwFlags = NativeMethods.MOUSEEVENTF_LEFTUP; break;
+                case MouseButton.Right: input[0].u.mi.dwFlags = NativeMethods.MOUSEEVENTF_RIGHTUP; break;
+                case MouseButton.Middle: input[0].u.mi.dwFlags = NativeMethods.MOUSEEVENTF_MIDDLEUP; break;
+                case MouseButton.X1:
+                    input[0].u.mi.dwFlags = NativeMethods.MOUSEEVENTF_XUP;
+                    input[0].u.mi.mouseData = NativeMethods.XBUTTON1; break;
+                case MouseButton.X2:
+                    input[0].u.mi.dwFlags = NativeMethods.MOUSEEVENTF_XUP;
+                    input[0].u.mi.mouseData = NativeMethods.XBUTTON2; break;
+            }
+            NativeMethods.SendInput(1, input, InputSize);
+        }
+        heldButtons.Clear();
     }
 
     private static POINT ToScreen(int cx, int cy, IntPtr hwnd)
