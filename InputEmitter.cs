@@ -127,16 +127,8 @@ public class InterceptionEmitter : IInputEmitter
                 "InputInterceptor 初始化失敗。請確認以系統管理員身分執行。");
 
         if (!InputInterceptor.CheckDriverInstalled())
-        {
-            bool installed = false;
-            try { installed = InputInterceptor.InstallDriver(); } catch { }
-            if (installed)
-                throw new InvalidOperationException(
-                    "Interception 驅動已安裝成功！請重新開機後再使用 HID 模式。");
             throw new InvalidOperationException(
-                "Interception 驅動未安裝。請以系統管理員執行 KTR，或手動安裝：\n" +
-                "https://github.com/oblitum/Interception/releases");
-        }
+                "Interception 驅動未安裝。請選 HID 模式以引導安裝，或重新開機後再試。");
 
         try
         {

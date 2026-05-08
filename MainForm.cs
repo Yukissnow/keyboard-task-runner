@@ -287,7 +287,44 @@ public class MainForm : Form
         UpdateButtonStates();
     }
 
-    private void OnModeChanged() { }
+    private void OnModeChanged()
+    {
+        if (cmbMode.SelectedIndex != (int)InputMode.HID) return;
+
+        bool initOk = false;
+        try { initOk = InputInterceptorNS.InputInterceptor.Initialize(); } catch { }
+        if (!initOk)
+        {
+            MessageBox.Show(this,
+                "InputInterceptor 初始化失敗。請以系統管理員身分執行。",
+                "KTR — HID 模式", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            cmbMode.SelectedIndex = (int)InputMode.Normal;
+            return;
+        }
+
+        bool installed = false;
+        try { installed = InputInterceptorNS.InputInterceptor.CheckDriverInstalled(); } catch { }
+        if (installed) return;
+
+        var result = MessageBox.Show(this,
+            "Interception 驅動尚未安裝。\n安裝後需要重新開機才能生效。\n\n是否立即安裝？",
+            "KTR — HID 模式", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+
+        if (result == DialogResult.Yes)
+        {
+            bool ok = false;
+            try { ok = InputInterceptorNS.InputInterceptor.InstallDriver(); } catch { }
+            if (ok)
+                MessageBox.Show(this, "驅動安裝成功，請重新開機後再使用 HID 模式。",
+                    "KTR", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            else
+                MessageBox.Show(this,
+                    "驅動安裝失敗。請以系統管理員身分執行，或手動下載安裝：\nhttps://github.com/oblitum/Interception/releases",
+                    "KTR", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+
+        cmbMode.SelectedIndex = (int)InputMode.Normal;
+    }
 
     private void DoSave()
     {
