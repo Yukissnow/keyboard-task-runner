@@ -4,6 +4,12 @@ using System.IO;
 
 namespace KeyboardTaskRunner;
 
+public enum InputMode : byte
+{
+    Normal = 0,
+    HID = 1,
+}
+
 public enum EventType : byte
 {
     KeyDown = 0,

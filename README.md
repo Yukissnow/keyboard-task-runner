@@ -24,13 +24,15 @@
 ## 介面說明
 
 ```
-[視窗選擇 ▼]                    [↻] [💾] [📂]
+[視窗選擇 ▼]                [↻] [💾] [📂] [模式 ▼] [🔍]
 [⏺ F8] [▶ F12]  速度[1.0] 重複[100] [∞] [抖][8] [鼠]
 ```
 
 - **視窗選擇** — 選擇要操控的目標視窗
 - **↻** — 重新整理視窗列表
 - **💾 / 📂** — 儲存/載入巨集檔案（.ktr）
+- **模式** — 輸入注入方式（一般 / HID）
+- **🔍** — 開啟診斷視窗，即時顯示按鍵/滑鼠事件的 INJECTED 旗標
 - **速度** — 播放倍速（1.0 = 原速）
 - **重複** — 播放次數
 - **∞** — 勾選時無限重複
@@ -64,6 +66,37 @@ dotnet publish -c Release -r win-x64 --self-contained -p:PublishSingleFile=true
 
 - Windows 10/11
 - 需以**系統管理員**身分執行（繞過 UIPI 限制）
+
+## 輸入模式
+
+KTR 提供兩種輸入注入方式：
+
+### 一般模式（預設）
+使用 `SendInput` API 注入輸入，自動安裝低階鉤子清除 `LLKHF_INJECTED` 旗標，讓其他 user-mode 程式看到的事件像真實鍵盤輸入。**對核心層反外掛無效。**
+
+### HID 模式
+透過 [Interception](https://github.com/oblitum/Interception) 核心驅動在裝置堆疊層注入輸入，事件帶有真實硬體輸入的特徵（無 INJECTED 旗標）。
+
+**啟用 HID 模式步驟：**
+
+1. 下載 [Interception 最新 release](https://github.com/oblitum/Interception/releases)
+2. 解壓縮後以**系統管理員**身分執行：
+   ```
+   install-interception.exe /install
+   ```
+3. **重新開機**
+4. 開啟 KTR，模式選單選擇 **HID**
+
+> ⚠️ Interception 驅動的簽章已被多數核心級反外掛（EAC、BattlEye、Vanguard、Nexon NGS）列入黑名單。請僅在自有測試環境使用。
+
+## 診斷視窗
+
+點 🔍 開啟診斷視窗，可即時看到每個鍵盤/滑鼠事件的來源：
+
+- **綠色 [REAL]** — 來自真實硬體（或 HID 模式）
+- **紅色 [INJECTED]** — 來自 SendInput（一般模式且診斷視窗開啟時）
+
+> 診斷視窗開啟時，一般模式不會自動清除 INJECTED 旗標，方便驗證兩種模式的差異。
 
 ## 技術細節
 

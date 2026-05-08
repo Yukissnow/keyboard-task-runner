@@ -8,14 +8,16 @@ namespace KeyboardTaskRunner;
 
 public class MainForm : Form
 {
-    private ComboBox cmbWindow = null!;
-    private Button btnRefresh = null!, btnSave = null!, btnLoad = null!;
+    private ComboBox cmbWindow = null!, cmbMode = null!;
+    private Button btnRefresh = null!, btnSave = null!, btnLoad = null!, btnDiag = null!;
     private Button btnRec = null!, btnPlay = null!;
     private NumericUpDown nudSpeed = null!, nudRepeat = null!, nudJitter = null!;
     private CheckBox chkInfinite = null!, chkJitter = null!, chkMouse = null!;
 
     private readonly InputRecorder recorder = new();
     private readonly InputPlayer player = new();
+    private readonly InjectedFlagCleaner flagCleaner = new();
+    public static bool DiagnosticOpen;
     private List<MacroEvent> events = new();
     private List<WindowInfo> windowList = new();
     private bool hasMacro;
@@ -30,6 +32,12 @@ public class MainForm : Form
         {
             if (IsHandleCreated && !IsDisposed)
                 BeginInvoke(new Action(OnPlaybackFinished));
+        };
+        player.PlaybackError += (msg) =>
+        {
+            if (IsHandleCreated && !IsDisposed)
+                BeginInvoke(new Action(() =>
+                    MessageBox.Show(this, $"播放失敗：{msg}", "KTR", MessageBoxButtons.OK, MessageBoxIcon.Error)));
         };
     }
 
@@ -56,6 +64,17 @@ public class MainForm : Form
         btnSave.Click += (_, _) => DoSave();
         btnLoad = MakeBtn("📂", lx + 344, y, 26, 23);
         btnLoad.Click += (_, _) => DoLoad();
+        cmbMode = new ComboBox
+        {
+            Location = new Point(lx + 374, y), Size = new Size(72, 22),
+            DropDownStyle = ComboBoxStyle.DropDownList
+        };
+        cmbMode.Items.AddRange(new object[] { "一般", "HID" });
+        cmbMode.SelectedIndex = 0;
+        cmbMode.SelectedIndexChanged += (_, _) => OnModeChanged();
+        Controls.Add(cmbMode);
+        btnDiag = MakeBtn("🔍", lx + 450, y, 26, 23);
+        btnDiag.Click += (_, _) => new DiagnosticForm().Show(this);
         y += 27;
 
         // Row 2: rec + play + speed + repeat + jitter
@@ -110,7 +129,7 @@ public class MainForm : Form
         chkMouse = new CheckBox { Text = "鼠", Location = new Point(lx + 393, y + 3), Size = new Size(42, 20) };
         Controls.Add(chkMouse);
 
-        ClientSize = new Size(442, y + 28);
+        ClientSize = new Size(482, y + 28);
     }
 
     private Button MakeBtn(string text, int x, int y, int w, int h)
@@ -164,6 +183,7 @@ public class MainForm : Form
     protected override void OnFormClosed(FormClosedEventArgs e)
     {
         RemoveHotkeyHook();
+        flagCleaner.Uninstall();
         recorder.Stop();
         player.Stop();
         base.OnFormClosed(e);
@@ -242,6 +262,7 @@ public class MainForm : Form
         if (player.IsPlaying)
         {
             player.Stop();
+            flagCleaner.Uninstall();
             return;
         }
 
@@ -253,11 +274,20 @@ public class MainForm : Form
         bool jitter = chkJitter.Checked;
         int jPct = (int)nudJitter.Value;
 
-        player.Start(events, SelectedWindow(), speed, repeat, infinite, jitter, jPct);
+        var mode = (InputMode)cmbMode.SelectedIndex;
+        if (mode == InputMode.Normal && !DiagnosticOpen)
+            flagCleaner.Install();
+        player.Start(events, SelectedWindow(), speed, repeat, infinite, jitter, jPct, mode);
         UpdateButtonStates();
     }
 
-    private void OnPlaybackFinished() => UpdateButtonStates();
+    private void OnPlaybackFinished()
+    {
+        flagCleaner.Uninstall();
+        UpdateButtonStates();
+    }
+
+    private void OnModeChanged() { }
 
     private void DoSave()
     {

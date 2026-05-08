@@ -10,5 +10,10 @@
     <_SuppressWinFormsTrimError>true</_SuppressWinFormsTrimError>
     <PublishTrimmed>true</PublishTrimmed>
     <TrimMode>partial</TrimMode>
+    <PublishReadyToRun>true</PublishReadyToRun>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
   </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="InputInterceptor" Version="2.2.1" />
+  </ItemGroup>
 </Project>
