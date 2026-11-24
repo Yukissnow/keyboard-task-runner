@@ -8,8 +8,8 @@ static class Program
     [STAThread]
     static void Main()
     {
-        Application.EnableVisualStyles();
-        Application.SetCompatibleTextRenderingDefault(false);
+        // applies visual styles, text rendering and the ApplicationHighDpiMode from the .csproj
+        ApplicationConfiguration.Initialize();
         Application.Run(new MainForm());
     }
 }

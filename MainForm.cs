@@ -24,6 +24,12 @@ public class MainForm : Form
 
     private IntPtr _hotkeyHook;
     private NativeMethods.HookProc? _hotkeyProc;
+    private readonly KeyRepeatFilter _hotkeyRepeat = new();
+
+    private const uint VK_F8 = 0x77;
+    private const uint VK_F12 = 0x7B;
+
+    private bool IsBusy => recorder.IsRecording || player.IsPlaying;
 
     public MainForm()
     {
@@ -171,6 +177,7 @@ public class MainForm : Form
             btnPlay.BackColor = hasMacro ? Color.Green : Color.Gray;
             btnPlay.Text = "▶ F12";
         }
+        btnSave.Enabled = btnLoad.Enabled = !IsBusy;
     }
 
     protected override void OnShown(EventArgs e)
@@ -210,13 +217,19 @@ public class MainForm : Form
         if (nCode == NativeMethods.HC_ACTION)
         {
             uint msg = (uint)wParam.ToInt64();
-            if (msg == NativeMethods.WM_KEYDOWN || msg == NativeMethods.WM_SYSKEYDOWN)
+            var kb = Marshal.PtrToStructure<KBDLLHOOKSTRUCT>(lParam);
+            if (kb.vkCode == VK_F8 || kb.vkCode == VK_F12)
             {
-                var kb = Marshal.PtrToStructure<KBDLLHOOKSTRUCT>(lParam);
-                if (kb.vkCode == 0x77) // F8
-                    BeginInvoke(new Action(ToggleRecord));
-                else if (kb.vkCode == 0x7B) // F12
-                    BeginInvoke(new Action(TogglePlay));
+                if (msg == NativeMethods.WM_KEYDOWN || msg == NativeMethods.WM_SYSKEYDOWN)
+                {
+                    // holding the key auto-repeats KeyDown; only the first press toggles
+                    if (_hotkeyRepeat.OnKeyDown(kb.vkCode))
+                        BeginInvoke(kb.vkCode == VK_F8 ? new Action(ToggleRecord) : new Action(TogglePlay));
+                }
+                else if (msg == NativeMethods.WM_KEYUP || msg == NativeMethods.WM_SYSKEYUP)
+                {
+                    _hotkeyRepeat.OnKeyUp(kb.vkCode);
+                }
             }
         }
         return NativeMethods.CallNextHookEx(_hotkeyHook, nCode, wParam, lParam);
@@ -328,27 +341,38 @@ public class MainForm : Form
 
     private void DoSave()
     {
-        if (events.Count == 0) return;
+        if (IsBusy || events.Count == 0) return;
         using var dlg = new SaveFileDialog { Filter = "KTR 巨集|*.ktr", DefaultExt = "ktr" };
         if (dlg.ShowDialog(this) == DialogResult.OK)
         {
+            // the dialog is modal but hotkeys still work while it is open
+            if (IsBusy || events.Count == 0) return;
             try { MacroFile.Save(dlg.FileName, events); }
-            catch { MessageBox.Show(this, "儲存失敗", "KTR", MessageBoxButtons.OK, MessageBoxIcon.Error); }
+            catch (Exception ex)
+            {
+                MessageBox.Show(this, $"儲存失敗：{ex.Message}", "KTR", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
         }
     }
 
     private void DoLoad()
     {
+        if (IsBusy) return;
         using var dlg = new OpenFileDialog { Filter = "KTR 巨集|*.ktr" };
         if (dlg.ShowDialog(this) == DialogResult.OK)
         {
+            // the dialog is modal but hotkeys still work while it is open
+            if (IsBusy) return;
             try
             {
                 events = MacroFile.Load(dlg.FileName);
                 hasMacro = events.Count > 0;
                 UpdateButtonStates();
             }
-            catch { MessageBox.Show(this, "載入失敗", "KTR", MessageBoxButtons.OK, MessageBoxIcon.Error); }
+            catch (Exception ex)
+            {
+                MessageBox.Show(this, $"載入失敗：{ex.Message}", "KTR", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
         }
     }
 }

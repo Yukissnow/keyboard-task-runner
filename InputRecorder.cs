@@ -62,6 +62,9 @@ public class InputRecorder
             NativeMethods.UnhookWindowsHookEx(_mouseHook);
             _mouseHook = IntPtr.Zero;
         }
+        // keys/buttons still held when recording stops would otherwise stay down
+        // across repeated playback iterations
+        MacroSequence.AppendReleasesForHeldInputs(_events);
     }
 
     public List<MacroEvent> GetEvents() => new(_events);
@@ -95,8 +98,9 @@ public class InputRecorder
                 // skip repeated KeyDown (key already held)
                 if (isDown && !_keysDown.Add(kb.vkCode))
                     return NativeMethods.CallNextHookEx(_keyboardHook, nCode, wParam, lParam);
-                if (!isDown)
-                    _keysDown.Remove(kb.vkCode);
+                // skip orphan KeyUp (key was pressed before recording started)
+                if (!isDown && !_keysDown.Remove(kb.vkCode))
+                    return NativeMethods.CallNextHookEx(_keyboardHook, nCode, wParam, lParam);
 
                 var evt = new MacroEvent
                 {

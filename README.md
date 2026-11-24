@@ -10,7 +10,7 @@
 - **速度控制** — 0.1x ~ 99x 倍速調整
 - **重複播放** — 指定次數或無限循環
 - **時間抖動** — 隨機偏移延遲時間（1%~50%），方向鍵與空白鍵不受影響
-- **滑鼠錄製** — 可選擇是否錄製滑鼠移動與點擊（預設關閉）
+- **滑鼠錄製** — 可選擇是否錄製滑鼠移動與點擊（預設關閉），支援多螢幕（含主螢幕左/上方的副螢幕）
 - **高精度計時** — 使用 `QueryPerformanceCounter` 絕對時間戳 + `timeBeginPeriod(1)` 確保毫秒級精度
 - **儲存/載入** — 自訂 `.ktr` 二進位格式
 
@@ -20,6 +20,8 @@
 |------|------|
 | F8   | 開始/停止錄製 |
 | F12  | 開始/停止播放 |
+
+按住熱鍵不會重複觸發，每按一次只切換一次。錄製或播放中無法儲存/載入。
 
 ## 介面說明
 
@@ -53,12 +55,28 @@
 需要 .NET 10 SDK。
 
 ```bash
-# 建置
-dotnet build -c Release
+# 建置（含測試專案）
+dotnet build KeyboardTaskRunner.sln -c Release
 
-# 發布為單一執行檔
-dotnet publish -c Release -r win-x64 --self-contained -p:PublishSingleFile=true
+# 執行單元測試
+dotnet test tests/KeyboardTaskRunner.Tests -c Release
+
+# 發布為單一執行檔（指定 app 專案，避免連測試專案一起發布）
+dotnet publish KeyboardTaskRunner.csproj -c Release -r win-x64 --self-contained -p:PublishSingleFile=true
 ```
+
+CI：push 到 `main` 或開 PR 時自動建置並跑測試（`.github/workflows/ci.yml`）；推 `v*` tag 時先跑測試再發布 Release（`release.yml`）。
+
+### 專案結構
+
+| 檔案 | 內容 |
+|------|------|
+| `MainForm.cs` | 主視窗、熱鍵 |
+| `InputRecorder.cs` / `InputPlayer.cs` | 錄製 / 播放 |
+| `InputEmitter.cs` | 輸入注入（SendInput / Interception） |
+| `MacroEvent.cs` | 事件結構與 `.ktr` 檔案讀寫 |
+| `MacroLogic.cs` | 不依賴 Win32 的純邏輯（時間軸、補放開事件、座標換算、熱鍵防連發），由單元測試覆蓋 |
+| `tests/KeyboardTaskRunner.Tests` | xUnit 單元測試 |
 
 產出位於 `bin/Release/net10.0-windows/win-x64/publish/`，只需複製 `KeyboardTaskRunner.exe` 即可，不需要 `.pdb` 檔。
 
@@ -103,6 +121,8 @@ KTR 提供兩種輸入注入方式：
 - 使用 `WH_KEYBOARD_LL` / `WH_MOUSE_LL` 低階掛鉤錄製輸入
 - 播放使用絕對時間戳避免累積誤差
 - 自動過濾 OS 產生的重複 KeyDown 事件（長壓時只錄首次按下與放開）
+- 停止錄製時仍按著的鍵/滑鼠鍵會自動補上放開事件，重複播放不會卡鍵；錄製開始前就按下的鍵，其放開事件不會被錄入
+- 滑鼠座標以整個虛擬桌面換算（`MOUSEEVENTF_VIRTUALDESK`），多螢幕位置正確
 - 滑鼠移動節流：距離 <5px 且間隔 <8ms 時跳過
 - 過濾 `LLKHF_INJECTED` 事件，不會錄到自身播放的輸入
 - `.ktr` 格式：`KTR1` magic number + 版本號 + 事件陣列

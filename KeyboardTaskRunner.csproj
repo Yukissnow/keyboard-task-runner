@@ -16,4 +16,10 @@
   <ItemGroup>
     <PackageReference Include="InputInterceptor" Version="2.2.1" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- test project lives under this folder; keep its sources out of the app -->
+    <Compile Remove="tests\**" />
+    <None Remove="tests\**" />
+    <EmbeddedResource Remove="tests\**" />
+  </ItemGroup>
 </Project>

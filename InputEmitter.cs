@@ -33,27 +33,35 @@ public class SendInputEmitter : IInputEmitter
         NativeMethods.SendInput(1, _input, InputSize);
     }
 
-    public void EmitMouseMove(int screenX, int screenY)
+    /// <summary>
+    /// Prepares an absolute mouse move to a screen position. Uses the whole virtual desktop
+    /// (all monitors) so positions on secondary monitors map correctly.
+    /// </summary>
+    private void SetAbsoluteMove(int screenX, int screenY)
     {
-        int sw = NativeMethods.GetSystemMetrics(NativeMethods.SM_CXSCREEN);
-        int sh = NativeMethods.GetSystemMetrics(NativeMethods.SM_CYSCREEN);
+        var (nx, ny) = ScreenMath.ToNormalizedAbsolute(screenX, screenY,
+            NativeMethods.GetSystemMetrics(NativeMethods.SM_XVIRTUALSCREEN),
+            NativeMethods.GetSystemMetrics(NativeMethods.SM_YVIRTUALSCREEN),
+            NativeMethods.GetSystemMetrics(NativeMethods.SM_CXVIRTUALSCREEN),
+            NativeMethods.GetSystemMetrics(NativeMethods.SM_CYVIRTUALSCREEN));
         _input[0] = default;
         _input[0].type = NativeMethods.INPUT_MOUSE;
-        _input[0].u.mi.dx = (int)((long)screenX * 65535 / sw);
-        _input[0].u.mi.dy = (int)((long)screenY * 65535 / sh);
-        _input[0].u.mi.dwFlags = NativeMethods.MOUSEEVENTF_MOVE | NativeMethods.MOUSEEVENTF_ABSOLUTE;
+        _input[0].u.mi.dx = nx;
+        _input[0].u.mi.dy = ny;
+        _input[0].u.mi.dwFlags = NativeMethods.MOUSEEVENTF_MOVE
+            | NativeMethods.MOUSEEVENTF_ABSOLUTE
+            | NativeMethods.MOUSEEVENTF_VIRTUALDESK;
+    }
+
+    public void EmitMouseMove(int screenX, int screenY)
+    {
+        SetAbsoluteMove(screenX, screenY);
         NativeMethods.SendInput(1, _input, InputSize);
     }
 
     public void EmitMouseButton(MacroEvent evt, int screenX, int screenY)
     {
-        int sw = NativeMethods.GetSystemMetrics(NativeMethods.SM_CXSCREEN);
-        int sh = NativeMethods.GetSystemMetrics(NativeMethods.SM_CYSCREEN);
-        _input[0] = default;
-        _input[0].type = NativeMethods.INPUT_MOUSE;
-        _input[0].u.mi.dx = (int)((long)screenX * 65535 / sw);
-        _input[0].u.mi.dy = (int)((long)screenY * 65535 / sh);
-        _input[0].u.mi.dwFlags = NativeMethods.MOUSEEVENTF_MOVE | NativeMethods.MOUSEEVENTF_ABSOLUTE;
+        SetAbsoluteMove(screenX, screenY);
         bool down = evt.Type == EventType.MouseDown;
         switch (evt.Button)
         {
