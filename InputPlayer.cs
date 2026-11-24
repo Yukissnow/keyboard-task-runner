@@ -57,33 +57,9 @@ public class InputPlayer
             t.Join(500);
     }
 
-    private static readonly HashSet<ushort> NoJitterKeys = new()
-    {
-        0x25, 0x26, 0x27, 0x28, 0x20,
-    };
-
-    private static bool IsNoJitterEvent(MacroEvent evt) =>
-        (evt.Type == EventType.KeyDown || evt.Type == EventType.KeyUp)
-        && NoJitterKeys.Contains(evt.VkCode);
-
     private void ComputeTimestamps(List<MacroEvent> events, long[] absTimesUs,
-        float speed, bool jitter, int jitterPct, bool firstIteration)
-    {
-        long cumUs = 0;
-        for (int i = 0; i < events.Count; i++)
-        {
-            uint delayMs = events[i].DelayMs;
-            if (i == 0 && firstIteration) delayMs = 100;
-            double scaledMs = delayMs / (double)speed;
-            if (jitter && scaledMs > 0 && !IsNoJitterEvent(events[i]))
-            {
-                double factor = 1.0 + (_rng.Next(2 * jitterPct + 1) - jitterPct) / 100.0;
-                scaledMs *= factor;
-            }
-            cumUs += (long)(scaledMs * 1000);
-            absTimesUs[i] = cumUs;
-        }
-    }
+        float speed, bool jitter, int jitterPct, bool firstIteration) =>
+        PlaybackTiming.Compute(events, absTimesUs, speed, jitter, jitterPct, firstIteration, _rng);
 
     private void Run(List<MacroEvent> events, IntPtr target,
         float speed, int repeatCount, bool infinite, bool jitter, int jitterPct,
@@ -157,9 +133,13 @@ public class InputPlayer
             long remainUs = (targetTick - now) * 1_000_000 / freq;
             if (remainUs > 5000)
             {
+                // coarse wait, wakes ~2ms early (or immediately on Stop); loop again to
+                // finish with the fine-grained sleep/spin instead of firing early
                 _stopEvent.Wait((int)(remainUs / 1000 - 2));
-                return;
+                continue;
             }
+            else if (remainUs > 2000)
+                Thread.Sleep(1);   // ~1ms with timeBeginPeriod(1); avoids burning a core
             else if (remainUs > 500)
                 Thread.Sleep(0);
             else

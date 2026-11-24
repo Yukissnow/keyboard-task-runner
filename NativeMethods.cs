@@ -109,6 +109,10 @@ public static class NativeMethods
 
     public const int SM_CXSCREEN = 0;
     public const int SM_CYSCREEN = 1;
+    public const int SM_XVIRTUALSCREEN = 76;
+    public const int SM_YVIRTUALSCREEN = 77;
+    public const int SM_CXVIRTUALSCREEN = 78;
+    public const int SM_CYVIRTUALSCREEN = 79;
 
     public const uint WM_KEYDOWN = 0x0100;
     public const uint WM_KEYUP = 0x0101;
@@ -123,6 +127,7 @@ public static class NativeMethods
     public const uint WM_XBUTTONDOWN = 0x020B;
     public const uint WM_XBUTTONUP = 0x020C;
     public const uint WM_SYSKEYDOWN = 0x0104;
+    public const uint WM_SYSKEYUP = 0x0105;
     public const uint WM_HOTKEY = 0x0312;
 
     public const uint LLKHF_INJECTED = 0x10;
@@ -147,6 +152,7 @@ public static class NativeMethods
     public const uint MOUSEEVENTF_XUP = 0x0100;
     public const uint MOUSEEVENTF_WHEEL = 0x0800;
     public const uint MOUSEEVENTF_ABSOLUTE = 0x8000;
+    public const uint MOUSEEVENTF_VIRTUALDESK = 0x4000;
 
     public const int XBUTTON1 = 0x0001;
     public const int XBUTTON2 = 0x0002;

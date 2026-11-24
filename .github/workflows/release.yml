@@ -18,10 +18,14 @@ jobs:
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
-          dotnet-quality: 'preview'
 
+      - name: Test
+        run: dotnet test tests/KeyboardTaskRunner.Tests/KeyboardTaskRunner.Tests.csproj -c Release
+
+      # publish the app project explicitly so the test project is not published too;
+      # trimming settings come from KeyboardTaskRunner.csproj
       - name: Publish
-        run: dotnet publish -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -p:PublishTrimmed=true -p:TrimMode=partial
+        run: dotnet publish KeyboardTaskRunner.csproj -c Release -r win-x64 --self-contained -p:PublishSingleFile=true
 
       - name: Create Release
         uses: softprops/action-gh-release@v2

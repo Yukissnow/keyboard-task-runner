@@ -49,7 +49,19 @@ public static class MacroFile
     public static void Save(string path, List<MacroEvent> events)
     {
         using var fs = new FileStream(path, FileMode.Create);
-        using var w = new BinaryWriter(fs);
+        Save(fs, events);
+    }
+
+    public static List<MacroEvent> Load(string path)
+    {
+        using var fs = new FileStream(path, FileMode.Open, FileAccess.Read);
+        return Load(fs);
+    }
+
+    /// <summary>Writes events in the .ktr v1 binary format. The stream is left open.</summary>
+    public static void Save(Stream stream, IReadOnlyList<MacroEvent> events)
+    {
+        using var w = new BinaryWriter(stream, System.Text.Encoding.UTF8, leaveOpen: true);
         w.Write(Magic);
         w.Write(Version);
         w.Write(events.Count);
@@ -66,32 +78,52 @@ public static class MacroFile
         }
     }
 
-    public static List<MacroEvent> Load(string path)
+    /// <summary>Size of one serialized event in bytes.</summary>
+    private const int EventSize = 1 + 2 + 2 + 4 + 4 + 1 + 2 + 4;
+
+    /// <summary>
+    /// Reads a .ktr v1 stream. Throws <see cref="InvalidDataException"/> for bad headers,
+    /// truncated data or undefined event values. The stream is left open.
+    /// </summary>
+    public static List<MacroEvent> Load(Stream stream)
     {
-        using var fs = new FileStream(path, FileMode.Open);
-        using var r = new BinaryReader(fs);
-        uint magic = r.ReadUInt32();
-        ushort version = r.ReadUInt16();
-        if (magic != Magic || version != Version)
-            throw new InvalidDataException("Invalid macro file format.");
-        int count = r.ReadInt32();
-        if (count < 0 || count > 10_000_000)
-            throw new InvalidDataException("Event count out of range.");
-        var events = new List<MacroEvent>(count);
-        for (int i = 0; i < count; i++)
+        using var r = new BinaryReader(stream, System.Text.Encoding.UTF8, leaveOpen: true);
+        try
         {
-            events.Add(new MacroEvent
+            uint magic = r.ReadUInt32();
+            ushort version = r.ReadUInt16();
+            if (magic != Magic || version != Version)
+                throw new InvalidDataException("不是有效的 KTR 巨集檔。");
+            int count = r.ReadInt32();
+            if (count < 0 || count > 10_000_000)
+                throw new InvalidDataException("事件數量超出範圍。");
+            // reject truncated files before allocating a huge list
+            if (stream.CanSeek && stream.Length - stream.Position < (long)count * EventSize)
+                throw new InvalidDataException("檔案不完整（可能已損毀）。");
+
+            var events = new List<MacroEvent>(count);
+            for (int i = 0; i < count; i++)
             {
-                Type = (EventType)r.ReadByte(),
-                ScanCode = r.ReadUInt16(),
-                VkCode = r.ReadUInt16(),
-                X = r.ReadInt32(),
-                Y = r.ReadInt32(),
-                Button = (MouseButton)r.ReadByte(),
-                WheelDelta = r.ReadInt16(),
-                DelayMs = r.ReadUInt32(),
-            });
+                var e = new MacroEvent
+                {
+                    Type = (EventType)r.ReadByte(),
+                    ScanCode = r.ReadUInt16(),
+                    VkCode = r.ReadUInt16(),
+                    X = r.ReadInt32(),
+                    Y = r.ReadInt32(),
+                    Button = (MouseButton)r.ReadByte(),
+                    WheelDelta = r.ReadInt16(),
+                    DelayMs = r.ReadUInt32(),
+                };
+                if (!Enum.IsDefined(e.Type) || !Enum.IsDefined(e.Button))
+                    throw new InvalidDataException($"第 {i + 1} 筆事件資料無效（可能已損毀）。");
+                events.Add(e);
+            }
+            return events;
         }
-        return events;
+        catch (EndOfStreamException)
+        {
+            throw new InvalidDataException("檔案不完整（可能已損毀）。");
+        }
     }
 }
